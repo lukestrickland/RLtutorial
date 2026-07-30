@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Rscript -e 'e <- new.env\\(\\); load\\(\"data/data_exp1.RData\", envir=e\\); print\\(ls\\(e\\)\\); str\\(e$dat, max.level=1, list.len=25\\)')",
+      "Bash(curl -s \"https://api.github.com/repos/StevenM1/rl_eam_tutorial/contents/data\")",
+      "Bash(curl -s \"https://api.github.com/repos/StevenM1/rl_eam_tutorial/contents/\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/StevenM1/rl_eam_tutorial/main/README.md\")",
+      "Bash(curl -s \"https://api.github.com/users/StevenM1/repos?per_page=100\")"
+    ]
+  }
+}

@@ -1,0 +1,1248 @@
+---
+title: "A step-by-step guide to reinforcement learning evidence accumulation models of instrumental learning tasks"
+author: "Steven Miletić, Niek Stevenson, Luke Strickland, Andrew Heathcote"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::pdf_document2:
+    latex_engine: xelatex
+    highlight: pygments
+    keep_tex: true
+    toc: false
+    includes:
+      in_header: preamble.tex
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    highlight: pygments
+link-citations: true
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(
+  echo        = TRUE,
+  warning     = FALSE,
+#  message     = FALSE,
+  comment     = "#>",
+  collapse    = FALSE,
+  results     = "markup",
+  fig.path    = "figs/",
+  fig.align   = "center",
+  fig.show    = "hold",
+  cache       = TRUE,
+  cache.path  = if (is_latex_output()) "cache/pdf/" else "cache/html/",
+  dev         = if (is_latex_output()) "pdf" else "svg"
+)
+
+# Log message outputs separately so they don't clutter the rendered document
+log_file <- file("render_messages.log", open = "wt")
+knitr::knit_hooks$set(message = function(x, options) {
+  cat(x, file = log_file, append = TRUE)
+  ""
+})
+
+# Helper for inline code that renders correctly in both PDF and HTML output
+tt <- function(x) {
+  if (knitr::is_html_output()) paste0("<code>", x, "</code>")
+  else paste0("\\texttt{", gsub("_", "\\\\_", x), "}")
+}
+
+# Utility function — call at the start of any base R plot chunk
+print_par <- function(layout = "1panel") {
+  switch(layout,
+    "1panel" = par(mar = c(3, 3, 1.5, 0.5),     mgp = c(1.8, 0.5, 0), tcl = -0.3,
+                   cex = 0.64, cex.axis = 1, cex.lab = 1.125, cex.main = 1.125),
+    "1x1"    = par(mar = c(3, 3, 1.5, 0.5),     mgp = c(1.8, 0.5, 0), tcl = -0.3,
+                   mfrow = c(1, 1),
+                   cex = 0.64, cex.axis = 1, cex.lab = 1.125, cex.main = 1.125),
+    "1x2"    = par(mar = c(3, 3, 1.5, 0.5),     mgp = c(1.8, 0.5, 0), tcl = -0.3,
+                   mfrow = c(1, 2),
+                   cex = 0.64, cex.axis = 1, cex.lab = 1.125, cex.main = 1.125),
+    "1x3"    = par(mar = c(3, 3, 1.5, 0.5),     mgp = c(1.8, 0.5, 0), tcl = -0.3,
+                   mfrow = c(1, 3),
+                   cex = 0.64, cex.axis = 1, cex.lab = 1.125, cex.main = 1.125),
+    "1x4"    = par(mar = c(3, 2.5, 1.5, 0.5),   mgp = c(1.5, 0.4, 0), tcl = -0.25,
+                   mfrow = c(1, 4),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "1x5"    = par(mar = c(2.5, 2.5, 1.2, 0.2), mgp = c(1.4, 0.4, 0), tcl = -0.25,
+                   mfrow = c(1, 5),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "2x1"    = par(mar = c(3, 3, 1.5, 0.5),     mgp = c(1.8, 0.5, 0), tcl = -0.3,
+                   mfrow = c(2, 1),
+                   cex = 0.64, cex.axis = 1, cex.lab = 1.125, cex.main = 1.125),
+    "2x2"    = par(mar = c(3, 3, 1.5, 0.5),     mgp = c(1.8, 0.5, 0), tcl = -0.3,
+                   mfrow = c(2, 2),
+                   cex = 0.64, cex.axis = 1, cex.lab = 1.125, cex.main = 1.125),
+    "2x3"    = par(mar = c(3, 2.5, 1.5, 0.5),   mgp = c(1.5, 0.4, 0), tcl = -0.3,
+                   mfrow = c(2, 3),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "2x4"    = par(mar = c(3, 2.5, 1.5, 0.5),   mgp = c(1.5, 0.4, 0), tcl = -0.3,
+                   mfrow = c(2, 4),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "3x2"    = par(mar = c(2.5, 2.5, 1.5, 0.5), mgp = c(1.5, 0.4, 0), tcl = -0.3,
+                   mfrow = c(3, 2),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "3x3"    = par(mar = c(2.5, 2.5, 1.5, 0.5), mgp = c(1.5, 0.4, 0), tcl = -0.3,
+                   mfrow = c(3, 3),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "4x3"    = par(mar = c(3, 2.5, 1.5, 0.5),   mgp = c(1.5, 0.4, 0), tcl = -0.3,
+                   mfrow = c(4, 3),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+    "3x4"    = par(mar = c(3, 2.5, 1.5, 0.5),   mgp = c(1.5, 0.4, 0), tcl = -0.3,
+                   mfrow = c(3, 4),
+                   cex = 0.5625, cex.axis = 1, cex.lab = 1.133, cex.main = 1.133),
+  )
+}
+
+# Figure size lookup by print_par layout
+fig_w <- list(
+  "1panel" = 2.2,
+  "1x1"    = 2.2,
+  "1x2"    = 4.0,
+  "1x3"    = 5.0,
+  "1x4"    = 5.5,
+  "1x5"    = 6.0,
+  "2x1"    = 3.5,
+  "2x2"    = 4.0,
+  "2x3"    = 5.0,
+  "2x4"    = 5.5,
+  "3x2"    = 4.0,
+  "3x3"    = 5.0,
+  "4x3"    = 5.0,
+  "3x4"    = 5.5
+)
+fig_h <- list(
+  "1panel" = 1.8,
+  "1x1"    = 1.8,
+  "1x2"    = 1.8,
+  "1x3"    = 1.8,
+  "1x4"    = 1.8,
+  "1x5"    = 1.7,
+  "2x1"    = 2.5,
+  "2x2"    = 2.5,
+  "2x3"    = 2.5,
+  "2x4"    = 2.5,
+  "3x2"    = 5.0,
+  "3x3"    = 5.0,
+  "4x3"    = 7.5,
+  "3x4"    = 5.0
+)
+```
+
+# Introduction
+
+In this tutorial, we demonstrate how to design combinations of reinforcement learning and evidence accumulation models (RL-EAMs) and fit them to data from instrumental learning tasks using hierarchical Bayesian methods, using the EMC2 package [@stevensonBayesianHierarchicalCognitive2026]. We assume familiarity with the basic EMC2 workflow — readers new to the package are encouraged to first consult the companion tutorial on dynamic EAMs [@mileticModellingStructuredTrialbytrial2026], which covers model specification, prior specification, sampling, convergence checking, and posterior predictive evaluation in detail. The present tutorial builds directly on those foundations, focusing on the additional steps required for RL-EAMs: covariate specification, kernel definition, accumulator coding, and feedback generation.
+
+To enhance readability, the code blocks below include only the arguments strictly required to run the code. The R Markdown file that generates this document additionally contains hidden code blocks handling multi-core processing, automatic saving and loading of samples, and plot formatting. The source document is available at https://github.com/StevenM1/rl_eam_tutorial/, alongside an HTML version that facilitates copy-and-pasting.
+
+First, let's load the required packages and data:
+
+```{r load-data}
+# TMP -- install the right branch
+# remotes::install_github("ampl-psych/EMC2@trend_api",dependencies=TRUE, Ncpus=8);.rs.restartR()
+# END TMP
+library(EMC2)
+set.seed(1) # for reproducibility
+
+# Plotting functions used later in this tutorial
+code_url <- paste0(
+  "https://raw.githubusercontent.com/StevenM1/",
+  "rl_eam_tutorial/refs/heads/main/RL_plotting_utils.R")
+source(code_url)
+
+# Load dataset 1 from Miletić et al. (2021)
+load('./data/data_exp1.RData')
+
+# Exclude participants that are marked 'excl' by Miletic et al. (2021)
+dat <- dat[!dat$excl, ]
+dat <- dat[!is.na(dat$rt),]
+dat$rt <- round(dat$rt, 3)  # round RTs to milliseconds
+```
+
+## From data to a basic RL-EAM: the RL-RD {#sec:rlrd}
+
+While *EMC2* is flexibly designed to allow any mapping between learning signals and decision parameters, most RL-EAM applications assume that drift rates are a function of Q-values. Implementing this requires four steps:
+
+1. Specify the covariates in the data;
+2. Apply the delta rule to each covariate;
+3. Define the trial-wise mapping between covariates and each accumulator's drift rate;
+4. Specify a feedback generator for posterior predictive simulation.
+
+Figure \@ref(fig:fig-rlrd-overview) illustrates how these steps connect. We work through each in turn, using dataset 1 from @Miletic2021.
+
+```{tikz fig-rlrd-overview-gen, include=FALSE, echo=FALSE, fig.ext=if(knitr::is_html_output()) 'svg' else 'pdf', engine.opts=list(convert='pdf2svg')}
+\usetikzlibrary{positioning, arrows.meta, shapes}
+\begin{tikzpicture}[
+    node distance=1.0cm,
+    box/.style={rectangle, draw, rounded corners, text width=2.5cm, minimum height=1cm, align=center},
+    vblock/.style={anchor=north, draw, rounded corners, align=center}
+]
+
+\node[box, text width=4.5cm] (data) {Data};
+\node[vblock, below=0.25cm of data] (data_tab) {%
+  \setlength{\tabcolsep}{4pt}%
+  \ttfamily\footnotesize
+  \begin{tabular}{rrrr}
+  R     & rew & s\_left & s\_right \\
+  left  & 1   & s\_D    & s\_e     \\
+  right & 0   & s\_T    & s\_t     \\
+  right & 0   & s\_e    & s\_D     \\
+  left  & 1   & s\_D    & s\_e     \\
+  left  & 1   & s\_T    & s\_t     \\
+  right & 1   & s\_t    & s\_T     \\
+  \end{tabular}
+};
+
+\node[box, text width=6.0cm, right=3cm of data] (dadm) {DADM};
+\node[vblock, below=0.25cm of dadm] (dadm_tab) {%
+  \setlength{\tabcolsep}{4pt}%
+  \ttfamily\footnotesize
+  \begin{tabular}{rrrrrrr}
+  t & R     & lR    & s\_D & s\_e & s\_T & s\_t \\
+  1 & left  & left  & 1    & NA   & NA   & NA   \\
+  1 & left  & right & 1    & NA   & NA   & NA   \\
+  2 & right & left  & NA   & NA   & NA   & 0    \\
+  2 & right & right & NA   & NA   & NA   & 0    \\
+  3 & right & left  & 0    & NA   & NA   & NA   \\
+  3 & right & right & 0    & NA   & NA   & NA   \\
+  \end{tabular}
+};
+
+\node[box, text width=1.2cm, right=0.5cm of dadm] (rates) {Drift\\rates};
+\node[vblock, below=0.25cm of rates] (rates_tab) {%
+  \setlength{\tabcolsep}{4pt}%
+  \ttfamily\footnotesize
+  \begin{tabular}{r}
+  v   \\
+  0.0 \\
+  0.0 \\
+  0.0 \\
+  0.0 \\
+  0.5 \\
+  0.4 \\
+  \end{tabular}
+};
+
+\node[box, text width=3.5cm, below=2.5cm of data_tab] (covmap) {Covariate coding};
+\node[box, text width=3.5cm, right=1.0cm of covmap] (deltarule) {Delta rule};
+
+\node[vblock, below=0.25cm of covmap] (covmap_tab) {%
+  \setlength{\tabcolsep}{4pt}%
+  \ttfamily\footnotesize
+  \begin{tabular}{rrrr}
+  s\_D & s\_e & s\_T & s\_t \\
+  1    & 0    & 0    & 0    \\
+  0    & 0    & 0    & 1    \\
+  0    & 1    & 0    & 0    \\
+  1    & 0    & 0    & 0    \\
+  0    & 0    & 1    & 0    \\
+  0    & 0    & 0    & 1    \\
+  \end{tabular}
+};
+
+\node[vblock, below=0.25cm of deltarule] (deltarule_tab) {%
+  \setlength{\tabcolsep}{4pt}%
+  \ttfamily\footnotesize
+  \begin{tabular}{rrrr}
+  s\_D  & s\_e & s\_T & s\_t \\
+  0.000 & 0    & 0.0  & 0    \\
+  0.000 & 0    & 0.0  & 0    \\
+  0.200 & 0    & 0.0  & 0    \\
+  0.200 & 0    & 0.0  & 0    \\
+  0.200 & 0    & 0.0  & 0    \\
+  0.160 & 0    & 0.0  & 0    \\
+  \end{tabular}
+};
+
+\node[box, text width=1.2cm, right=1cm of deltarule] (weight) {Weight};
+\node[vblock, below=0.25cm of weight] (weight_tab) {%
+  \setlength{\tabcolsep}{4pt}%
+  \ttfamily\footnotesize
+  \begin{tabular}{r}
+  w   \\
+  2.5 \\
+  2.5 \\
+  2.5 \\
+  2.5 \\
+  2.5 \\
+  2.5 \\
+  \end{tabular}
+};
+
+\draw[->] (data_tab) -- node[midway, sloped, above, font=\footnotesize] {design(\textbf{functions}, ...)} (dadm_tab);
+\draw[->] (dadm_tab) -- (deltarule);
+\draw[->] (dadm_tab) -- node[midway, sloped, above, font=\footnotesize] {make\_base(\textbf{coding}, ...)} (covmap);
+\draw[->] (covmap_tab) -- node[midway, sloped, above, font=\footnotesize] {$\times$} (deltarule_tab);
+\draw[->] (deltarule_tab) -- node[midway, sloped, above, font=\footnotesize] {$\times$} (weight_tab);
+\draw[->] (weight_tab.east) -- node[midway, sloped, above, font=\footnotesize] {row sums} (rates_tab);
+
+\end{tikzpicture}
+```
+
+```{r fig-rlrd-overview, echo=FALSE, fig.align='center', fig.cap=cap}
+cap <- paste0(
+  "Overview of the steps required to implement an RL-RD in ", tt("EMC2"), ". ",
+  "Users specify two sets of functions: covariate functions supplied to ",
+  tt("design()"), " that generate one column per symbol in the ",
+  tt("dadm"), " (here, ", tt("s_D"), ", ", tt("s_e"), ", ", tt("s_T"), ", ", tt("s_t"), "); ",
+  "and a coding function supplied to ", tt("make_base()"), " that specifies ",
+  "which covariate drives which accumulator on each trial. ",
+  "The trial-wise drift rate is the row sum of the updated Q-values ",
+  "multiplied by the covariate coding and the weight parameter."
+)
+
+ext <- if (knitr::is_html_output()) "svg" else "pdf"
+knitr::include_graphics(paste0("figs/fig-rlrd-overview-gen-1.", ext))
+```
+
+### Step 1: Covariate specification {#sec:covariates}
+
+We begin by formatting the data into the structure *EMC2* requires for all choice tasks: a `subjects` column (participant identifier), `S` (stimulus), `R` (response), and `rt` (response time in seconds). `S` and `R` are response-coded — here, they refer to the direction of the chosen response (left/right). In this experiment, the optimal direction (i.e., the one with the higher reward probability) varies across trials, so we derive `S` from the reward probability columns:
+
+```{r format-data}
+dat$subjects <- as.factor(dat$pp)
+dat$R        <- factor(dat$choiceDirection, levels = c('left', 'right'))
+dat$S        <- factor(ifelse(dat$p_win_left > dat$p_win_right, 'left', 'right'),
+                        levels = c('left', 'right'))
+
+print(head(dat[, c('subjects', 'S', 'R', 'rt')]))
+```
+
+This is sufficient to fit a standard EAM. Instrumental learning tasks add two further pieces of information: the `reward` received on each trial, and the `symbol` to which that reward was assigned. Note that the reward does not have to correspond to the *chosen* symbol — experiments with counterfactual feedback [@palminteriConfirmationBiasHuman2017] provide feedback for both symbols simultaneously. What matters is knowing *which* symbol each piece of feedback belongs to. We extract these columns next:
+
+```{r format-data-rl}
+# Recode reward to [0, 1]
+dat$reward  <- dat$reward / 100
+
+# Symbol presented on the left and right on each trial
+dat$s_left  <- paste0('s_', dat$appear_left)
+dat$s_right <- paste0('s_', dat$appear_right)
+
+# We also keep track of the 'exposure' - i.e., the number of times a stimulus pair has been presented. This is not required for fitting, but facilitates plotting later on.
+dat$exposure <- get_exposure(dat)
+
+print(head(dat[, c('subjects', 'S', 'R', 'rt', 'reward', 's_left', 's_right', 'exposure')]))
+```
+
+For posterior predictive simulation we also need to be able to regenerate feedback in the same way it was generated in the experiment — here, by sampling from a Bernoulli distribution with symbol-specific reward probabilities. We therefore retain those probabilities, and trim the data frame to the columns needed for modelling:
+
+```{r format-data-final}
+dat$p_left  <- dat$p_win_left
+dat$p_right <- dat$p_win_right
+
+dat <- dat[, c('subjects', 'S', 'R', 'rt', 'reward',
+               's_left', 's_right', 'p_left', 'p_right', 'exposure')]
+print(head(dat))
+```
+
+Note that the column names `reward`, `s_left`, `s_right`, `p_left`, and `p_right` are arbitrary — as long as the user-defined functions described below refer to the correct columns, any names will work.
+
+The next step is to create one column per symbol, indicating the reward received when that symbol was chosen (and `NA` otherwise). An obvious approach would be to add these columns directly to the data. However, *EMC2* treats all non-`rt`, non-`R` columns as fixed design factors. This is a problem for simulation: when generating posterior predictives, the covariate columns must be recomputed from the *simulated* choices and rewards, not copied from the observed data. We therefore define *functions* that construct the covariate columns on the fly. *EMC2* re-applies these functions after each simulated trial, ensuring that Q-values track simulated rather than observed behaviour:
+
+```{r define-covariates}
+# Generator: returns a function that extracts the reward for one specific symbol
+covariate_column_generator <- function(col_name) {
+  f <- function(data) {
+    RS <- ifelse(data$R == 'left', data$s_left, data$s_right)
+    out <- rep(NA, nrow(data))
+    out[(RS == col_name)] <- data$reward[(RS == col_name)]
+    out
+  }
+  return(f)
+}
+
+all_symbols <- unique(c(dat$s_left, dat$s_right))
+make_covariate_columns <- setNames(
+  lapply(all_symbols, covariate_column_generator),
+  all_symbols
+)
+```
+
+`make_covariate_columns` is now a named list of functions, one per symbol. We pass it to `design()` via the `functions` argument, which tells *EMC2* to apply them to the data-augmented design matrix (`dadm`) at construction time — and again during simulation:
+
+```{r design-baseline}
+design_RDM <- design(model        = RDM,
+                     data         = dat,
+                     functions    = make_covariate_columns,
+                     matchfun     = function(d) d$S == d$lR,
+                     formula      = list(B ~ 1, v ~ 1, t0 ~ 1),
+                     report_p_vector = FALSE)
+
+emc <- make_emc(dat, design_RDM)
+print(head(emc[[1]]$data[[1]]))
+```
+
+The symbol columns are now present in the `dadm`, with `NA` wherever a symbol was not chosen on that trial.
+
+### Step 2: Apply the delta rule {#sec:delta}
+
+Trialwise covariates are handled through `trend` objects in *EMC2*, exactly as in the dynamic EAM tutorial. The kernel specifies the update rule applied to the covariate — here, the delta rule — and the base specifies which decision parameter is informed by the result and how. Since we want Q-values to influence drift rates linearly on the natural scale, we use a `lin` base with `phase = "posttransform"`:
+
+```{r delta-rule}
+delta_kernel <- make_kernel(cov_names = all_symbols, type = 'delta')
+lin_base     <- make_base(target_parameter = 'v',
+                          type             = 'lin',
+                          kernel           = delta_kernel,
+                          phase            = 'posttransform')
+trend <- make_trend(lin_base)
+```
+
+<!-- To inspect what the kernel produces, we can call `apply_kernel()` with a parameter vector. The parameters introduced by the delta kernel are an initial Q-value `v.q0` and a learning rate `v.alpha`: -->
+
+<!-- ```{r delta-rule-inspect} -->
+<!-- emc <- make_emc(dat, design_RDM) -->
+<!-- kernel_pars <- c('v.q0' = 0, 'v.alpha' = 0.2) -->
+<!-- print(head(cbind( -->
+<!--   emc[[1]]$data[[1]][, all_symbols], -->
+<!--   apply_kernel(kernel_pars, emc = emc, subject = 1) -->
+<!-- ))) -->
+<!-- ``` -->
+
+### Step 3: Define the accumulator coding {#sec:coding}
+
+By default, *EMC2* sums the updated Q-values across all symbols when computing drift rates. On each trial, however, only two symbols are shown, and each accumulator should be driven only by the Q-value of the symbol it represents. We therefore define a *coding* function that returns a matrix with one row per `dadm` row and one column per symbol, with a 1 where the symbol matches the accumulator's response option and 0 elsewhere:
+
+```{r rlrd-coding}
+make_RL_RD_coding <- function(dadm, cov_names) {
+  lS <- ifelse(dadm$lR == 'left', dadm$s_left, dadm$s_right)
+  sapply(cov_names, function(col) as.numeric(lS == col))
+}
+
+print(head(make_RL_RD_coding(emc[[1]]$data[[1]], all_symbols)))
+```
+
+We pass this to `make_base()` via the `coding` argument, rebuild the trend and design, and fix `v.q0 = 0` (initial Q-values are hard to estimate):
+
+```{r rlrd-design}
+lin_base <- make_base(target_parameter = 'v',
+                      type             = 'lin',
+                      kernel           = delta_kernel,
+                      phase            = 'posttransform',
+                      coding           = list(w = make_RL_RD_coding))
+trend <- make_trend(lin_base)
+
+design_RDM <- design(model           = RDM,
+                     data            = dat,
+                     functions       = make_covariate_columns,
+                     matchfun        = function(d) d$S == d$lR,
+                     formula         = list(B ~ 1, v ~ 1, t0 ~ 1),
+                     trend           = trend,
+                     constants       = c('v.q0' = 0),
+                     report_p_vector = FALSE)
+
+emc <- make_emc(dat, design_RDM)
+```
+
+The drift rate for each accumulator is now determined solely by the Q-value of the symbol that accumulator represents.
+
+### Step 4: Feedback generator {#sec:feedback}
+
+The feedback generator is a function that *EMC2* calls during simulation to produce trial-by-trial rewards from simulated choices. It receives the `dadm` (with simulated responses in `R`) and must return a reward vector of the same length. Here, we sample from a Bernoulli distribution using the reward probability of the chosen symbol.
+One subtlety is that race models such as the RDM have one row per accumulator per trial in the dadm, whereas the DDM has one row per trial. We therefore define a single unified feedback generator that detects the dadm structure and acts accordingly — this function can be reused across all models in this tutorial:
+
+```{r feedback-generator}
+feedback_generator <- function(d) {
+  if ("lR" %in% names(d) && nlevels(d$lR) > 1) {
+    # Race model: dadm has one row per accumulator per trial.
+    # Subset to one row per trial, generate rewards, then repeat
+    # to match the full dadm length.
+    data     <- d[d$lR == levels(d$lR)[1], ]
+    p_chosen <- ifelse(data$R == 'left', data$p_left, data$p_right)
+    rep(rbinom(nrow(data), 1, p_chosen), each = nlevels(d$lR))
+  } else {
+    # DDM: dadm has one row per trial — generate rewards directly.
+    p_chosen <- ifelse(d$R == 'left', d$p_left, d$p_right)
+    rbinom(nrow(d), 1, p_chosen)
+  }
+}
+
+design_RDM <- design(model           = RDM,
+                     data            = dat,
+                     functions       = c(reward=feedback_generator,
+                                         make_covariate_columns),
+                     matchfun        = function(d) d$S == d$lR,
+                     formula         = list(B ~ 1, v ~ 1, t0 ~ 1),
+                     trend           = trend,
+                     constants       = c('v.q0' = 0),
+                     report_p_vector = FALSE)
+
+emc <- make_emc(dat, design_RDM)
+```
+
+### Fitting and checking the RL-RD
+
+With the covariates, kernel, coding, and feedback generator specified, we can now estimate the RL-RD model.
+
+```{r rlrd-fit-run, include=FALSE, dependson="feedback-generator"}
+rlrd_fn <- "./cache/exp1_rlrd.RData"
+if (file.exists(rlrd_fn)) {
+  emc_rlrd <- EMC2:::loadRData(rlrd_fn)
+} else {
+  emc_rlrd <- fit(emc, cores_per_chain = 5, fileName = rlrd_fn)
+}
+```
+
+```{r rlrd-fit-code, eval=FALSE}
+emc_rlrd <- fit(emc)
+```
+
+After fitting, it is important to check convergence. The `check()` function plots the group-level mean, group-level variance, and subject-level parameters with the highest R-hat (i.e., worst convergence), and prints convergence statistics (Rhat and effective sample size) to the console.
+
+```{r rlrd-check-code, eval=FALSE}
+check(emc_rlrd)
+```
+```{r rlrd-check-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="rlrd-fit-run"}
+par(mar = c(3, 3, 1.5, 0.5))  # opens device in this chunk before check() runs
+invisible(capture.output({ckc <- check(emc_rlrd, plot_worst = FALSE, set.par=FALSE)}))
+subn <- which.max(lapply(ckc$alpha, function(x) max(x[1, ])))
+cap <- paste0(
+  "Trace plots of the sampled parameters with highest Rhat values (i.e., worst convergence) at the group-level mean (left, mu), the group-level variance (middle, sigma2), and the subject-level (alpha; here, subject ",
+  subn,
+  "). ESS = effective sample size."
+)
+print_par("1x3")
+check(emc_rlrd, set.par = FALSE)
+```
+
+### Posterior summaries and predictive checks
+
+Superimposed prior and posterior distributions and credible intervals can be obtained with `plot_pars()` and `credint()`, respectively. Both accept a `selection` argument specifying which type of parameters to use — by default `"mu"` (group-level means).
+
+```{r rlrd-pars-code, eval=FALSE}
+plot_pars(emc_rlrd)
+```
+
+```{r rlrd-pars-run, echo=FALSE, fig.width=fig_w[["1x5"]], fig.height=fig_h[["1x5"]], fig.cap=cap, dependson="rlrd-fit-run"}
+cap <- "Posterior density (black) and prior density (red) of sampled group-level mean parameters of the RL-RD. Contraction indicates the reduction of uncertainty in the posterior versus the prior (1 minus the ratio of the posterior to prior variance)."
+print_par("1x5")
+plot_pars(emc_rlrd, set.par = FALSE)
+```
+
+```{r rlrd-credint-code, eval=FALSE}
+credint(emc_rlrd)
+```
+
+```{r rlrd-credint-run, echo=FALSE, dependson="rlrd-fit-run"}
+print(credint(emc_rlrd))
+```
+
+Supplying the fitted model to the `predict()` function generates posterior predictive datasets, which can then be used to assess global quality of fit. Here, we use a custom plotting function `plot_learning()` from the accompanying utilities file to summarise accuracy and response time distributions. We first determine the number of times a stimulus has been presented (the exposure) in both the data and the posterior predictives, which we then aggregate into 10 bins to reduce noise.
+
+```{r rlrd-pp-code, eval=FALSE}
+pp_rlrd <- predict(emc_rlrd)
+
+plot_learning(dat=dat_rlrd, pp=pp_rlrd, x.var='exposure', n.breaks=10)
+```
+
+```{r rlrd-pp-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="rlrd-fit-run"}
+pp_rlrd <- predict(emc_rlrd, n_post = 50, n_cores = 20)
+
+cap <- "Learning plots of the RL-RD. Left panel shows accuracy over exposure (i.e., the number of times a stimulus pair has been seen), binned into 10 bins. Black lines are data, red shaded areas are 90% credible interval of the model's posterior predictives. Middle and right panels show correct and error RT distributions, respectively. The lower, middle, and top lines correspond to the 10th, 50th, and 90th RT quantiles."
+print_par("1x3")
+plot_learning(dat=dat, pp=pp_rlrd, x.var='exposure', n.breaks=10, set.par=FALSE)
+```
+
+## Changing the EAM: RL-DDM
+A popular alternative to the RL-RD is the RL-DDM, which replaces the racing diffusion process with a Wiener diffusion model. The key difference lies in the accumulator coding. In the RL-RD, each accumulator is driven by the Q-value of the symbol it represents: the left accumulator by $Q_\text{left}$, the right accumulator by $Q_\text{right}$. In the DDM, there is a single drift rate that reflects the *relative* evidence for one response over the other. The natural RL analogue is therefore a difference coding: $v = w \cdot (Q_\text{right} - Q_\text{left})$, where positive values push the process towards the upper (right) boundary and negative values towards the lower (left) boundary. This is implemented by replacing the accumulator-specific coding of the RL-RD with a difference coding function:
+
+```{r rlddm-coding}
+make_RL_DDM_coding <- function(dadm, cov_names) {
+  coding_left  <- sapply(cov_names, function(col) ifelse(dadm$s_left  == col,  1, 0))
+  coding_right <- sapply(cov_names, function(col) ifelse(dadm$s_right == col,  1, 0))
+  coding_right - coding_left
+}
+```
+
+For a given trial, this returns +1 for the symbol on the right, −1 for the symbol on the left, and 0 for all other symbols. The row sum of the updated Q-values multiplied by this coding therefore is $Q_\text{right} - Q_\text{left}$, which is then scaled by the weight parameter $w$ to obtain the drift rate. Everything else — the delta kernel, the `lin` base, the feedback generator — carries over unchanged:
+
+```{r rlddm-design}
+delta_kernel_ddm <- make_kernel(cov_names = all_symbols, type = 'delta')
+lin_base_ddm     <- make_base(target_parameter = 'v',
+                               type             = 'lin',
+                               kernel           = delta_kernel_ddm,
+                               phase            = 'posttransform',
+                               coding           = list(w = make_RL_DDM_coding))
+trend_ddm <- make_trend(lin_base_ddm)
+
+design_DDM <- design(model           = DDM,
+                     data            = dat,
+                     functions       = c(reward=feedback_generator,
+                                         make_covariate_columns),
+                     matchfun        = function(d) d$S == d$lR,
+                     formula         = list(a ~ 1, v ~ 1, t0 ~ 1),
+                     trend           = trend_ddm,
+                     constants       = c('v.q0' = 0),
+                     report_p_vector = FALSE)
+
+emc_rlddm <- make_emc(dat, design_DDM)
+```
+
+```{r rlddm-fit-code, eval=FALSE}
+emc_rlddm <- fit(emc_rlddm)
+```
+
+```{r rlddm-fit-run, include=FALSE, dependson="rlddm-design"}
+rlddm_fn <- "./cache/exp1_rlddm.RData"
+if (file.exists(rlddm_fn)) {
+  emc_rlddm <- EMC2:::loadRData(rlddm_fn)
+} else {
+  emc_rlddm <- make_emc(dat, design_DDM)
+  emc_rlddm <- fit(emc_rlddm, cores_per_chain = 5, fileName = rlddm_fn)
+  emc_rlddm <- add_ICs_MLL(emc_rlddm)
+  save(emc_rlddm, file = rlddm_fn)
+}
+```
+
+The posterior predictives reveal that the RL-DDM does not fit the shape of the response time distributions well:
+
+```{r rlddm-pp-code, eval=FALSE}
+pp_rlddm <- predict(emc_rlddm)
+
+plot_learning(dat=dat, pp=pp_rlddm, x.var='exposure')
+```
+
+```{r rlddm-pp-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="rlddm-fit-run"}
+pp_rlddm <- predict(emc_rlddm, n_cores = 24)
+
+cap <- "Learning plots of the RL-DDM. Left panel shows accuracy over exposure (i.e., the number of times a stimulus pair has been seen), binned into 10 bins. Black lines are data, red shaded areas are 90% credible interval of the model's posterior predictives. Middle and right panels show correct and error RT distributions, respectively. The lower, middle, and top lines correspond to the 10th, 50th, and 90th RT quantiles."
+print_par("1x3")
+plot_learning(dat=dat, pp=pp_rlddm, x.var='exposure', set.par=FALSE)
+```
+
+## Changing the EAM: RL-ARD {#sec:rlard}
+
+The RL-ARD [@Miletic2021] combines the race architecture of the RL-RD with a richer parameterisation of how Q-values map to drift rates. To see why this is useful, consider what the RL-RD and RL-DDM codings each capture. The RL-RD coding maps each Q-value directly to the drift rate of the corresponding accumulator: the left accumulator races at a rate proportional to $Q_\text{left}$, the right at a rate proportional to $Q_\text{right}$. The RL-DDM coding maps the *difference* $Q_\text{right} - Q_\text{left}$ to a single drift rate, capturing only the relative preference between options. Neither coding alone is fully satisfactory: the RL-RD cannot represent relative preference independently of overall evidence strength, and the RL-DDM discards the absolute level of Q-values entirely.
+
+The RL-ARD resolves this by decomposing the Q-values into two components, each mapped to drift rates via a separate base:
+
+- A **difference** component, $Q_\text{self} - Q_\text{other}$, weighted by $w_d$. This captures the relative preference for the accumulator's own option over the alternative — analogous to the RL-DDM drift rate, but applied within a race architecture.
+- A **sum** component, $Q_\text{self} + Q_\text{other}$, weighted by $w_s$. This captures the overall level of evidence, regardless of which option is preferred. A high sum means both options are well-learned; a low sum means both are uncertain.
+
+Together, the drift rate for accumulator $i$ is:
+
+$$
+v_i = v_0 + w_d \cdot (Q_i - Q_j) + w_s \cdot (Q_i + Q_j)
+$$
+
+where $v_0$ is the baseline drift rate intercept (sometimes interpreted as an urgency signal) and $j$ indexes the competing accumulator. This parameterisation allows the data to determine the relative contribution of absolute and relative Q-values to response speed and accuracy.
+
+### Coding functions
+
+The difference and sum codings extend the earlier examples in a straightforward way. Both require knowing not only which symbol the accumulator represents (`lS`, as in the RL-RD coding) but also which symbol the *competing* accumulator represents (`lSother`):
+
+```{r rlard-coding}
+make_RL_ARD_difference <- function(dadm, cov_names) {
+  lS      <- ifelse(dadm$lR == 'left', dadm$s_left,  dadm$s_right)
+  lSother <- ifelse(dadm$lR == 'left', dadm$s_right, dadm$s_left)
+  # +1 for own symbol, -1 for competing symbol (cf. RL-DDM: +1 right, -1 left)
+  codinglS      <- sapply(cov_names, function(col) as.numeric(lS      == col))
+  codinglSother <- sapply(cov_names, function(col) as.numeric(lSother == col))
+  codinglS - codinglSother
+}
+
+make_RL_ARD_sum <- function(dadm, cov_names) {
+  lS      <- ifelse(dadm$lR == 'left', dadm$s_left,  dadm$s_right)
+  lSother <- ifelse(dadm$lR == 'left', dadm$s_right, dadm$s_left)
+  # +1 for both own and competing symbol
+  codinglS      <- sapply(cov_names, function(col) as.numeric(lS      == col))
+  codinglSother <- sapply(cov_names, function(col) as.numeric(lSother == col))
+  codinglS + codinglSother
+}
+```
+
+Note the relationship to the earlier codings: `make_RL_ARD_difference` generalises `make_RL_DDM_coding` from a fixed left/right frame to an accumulator-relative frame (own minus other, rather than right minus left). `make_RL_ARD_sum` is new, and has no direct analogue in the RL-RD or RL-DDM.
+
+### Design specification
+
+Each coding function is passed to its own `make_base()` call, and the two bases are combined into a single trend with `make_trend()`. The delta kernel and feedback generator are shared with the earlier models:
+
+```{r rlard-design}
+delta_kernel_ard <- make_kernel(cov_names = all_symbols, type = 'delta')
+
+base_diff <- make_base(target_parameter = 'v',
+                       type             = 'lin',
+                       kernel           = delta_kernel_ard,
+                       phase            = 'posttransform',
+                       coding           = list(d = make_RL_ARD_difference))
+base_sum  <- make_base(target_parameter = 'v',
+                       type             = 'lin',
+                       kernel           = delta_kernel_ard,
+                       phase            = 'posttransform',
+                       coding           = list(s = make_RL_ARD_sum))
+trend_ard <- make_trend(base_diff, base_sum)
+
+design_ARD <- design(model           = RDM,
+                     data            = dat,
+                     functions       = c(reward=feedback_generator,
+                                         make_covariate_columns),
+                     matchfun        = function(d) d$S == d$lR,
+                     formula         = list(B ~ 1, v ~ 1, t0 ~ 1),
+                     trend           = trend_ard,
+                     constants       = c('v.q0' = 0),
+                     report_p_vector = FALSE)
+
+emc_rlard <- make_emc(dat, design_ARD)
+```
+
+The RL-ARD introduces one additional sampled parameter compared to the RL-RD: the sum weight `v.w_s` (alongside the difference weight `v.w_d`, the learning rate `v.alpha`, the baseline drift `v`, the threshold `B`, and the non-decision time `t0`).
+
+### Fitting and convergence
+
+```{r rlard-fit-code, eval=FALSE}
+emc_rlard <- fit(emc_rlard)
+check(emc_rlard)
+```
+
+```{r rlard-fit-run, include=FALSE, dependson="rlard-design"}
+rlard_fn <- "./cache/exp1_rlard.RData"
+if (file.exists(rlard_fn)) {
+  emc_rlard <- EMC2:::loadRData(rlard_fn)
+} else {
+  emc_rlard <- make_emc(dat, design_ARD)
+  emc_rlard <- fit(emc_rlard, cores_per_chain = 5, fileName = rlard_fn)
+  emc_rlard <- add_ICs_MLL(emc_rlard)
+  save(emc_rlard, file = rlard_fn)
+}
+```
+
+```{r rlard-check-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="rlard-fit-run"}
+par(mar = c(3, 3, 1.5, 0.5))  # opens device in this chunk before check() runs
+invisible(capture.output({ckc <- check(emc_rlard, plot_worst = FALSE, set.par=FALSE)}))
+subn <- which.max(lapply(ckc$alpha, function(x) max(x[1, ])))
+cap <- paste0(
+  "Trace plots of the sampled parameters with highest Rhat values (i.e., worst convergence) at the group-level mean (left, mu), the group-level variance (middle, sigma2), and the subject-level (alpha; here, subject ",
+  subn,
+  "). ESS = effective sample size."
+)
+print_par("1x3")
+check(emc_rlard, set.par = FALSE)
+```
+
+<!-- ```{r rlard-check-run, echo=FALSE, dependson="rlard-fit-run", fig.width=fig_w[["1x3"]], fig} -->
+<!-- check(emc_rlard) -->
+<!-- ``` -->
+
+### Posteriors
+
+```{r rlard-plotpars-code, eval=FALSE}
+plot_pars(emc_rlard)
+```
+
+```{r rlard-plotpars-run, echo=FALSE, fig.width=fig_w[["2x3"]], fig.height=fig_h[["2x3"]], fig.cap=cap, dependson="rlard-fit-run"}
+cap <- paste0(
+  "Posterior density (black) and prior density (red) of sampled group-level mean parameters ",
+  "of the RL-ARD. ", tt("v.alpha"), " is the learning rate; ",
+  tt("v.w_d"), " and ", tt("v.w_s"), " are the difference and sum weights, respectively; ",
+  tt("v"), " is the baseline drift rate; ",
+  tt("B"), " is the threshold; and ", tt("t0"), " is the non-decision time. ",
+  "Contraction indicates the reduction of uncertainty in the posterior versus the prior."
+)
+print_par("2x3")
+plot_pars(emc_rlard, set.par = FALSE)
+```
+
+```{r rlard-credint-code, dependson="rlard-fit-run"}
+credint(emc_rlard)
+```
+
+### Posterior predictives
+
+```{r rlard-pp-code, eval=FALSE}
+pp_rlard <- predict(emc_rlard, return_trialwise_parameters = TRUE)
+
+plot_learning(dat=dat, pp=pp_rlard, x.var='exposure')
+```
+
+```{r rlard-pp-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="rlard-fit-run"}
+pp_rlard <- predict(emc_rlard, n_cores = 24, return_trialwise_parameters = TRUE)
+
+cap <- "Learning plots of the RL-ARD. Left panel shows accuracy over exposure (i.e., the number of times a stimulus pair has been seen), binned into 10 bins. Black lines are data, red shaded areas are 90% credible interval of the model's posterior predictives. Middle and right panels show correct and error RT distributions, respectively. The lower, middle, and top lines correspond to the 10th, 50th, and 90th RT quantiles."
+print_par("1x3")
+plot_learning(dat=dat, pp=pp_rlard[is.finite(pp_rlard$rt),], x.var='exposure', set.par=FALSE)
+```
+
+### Model comparison
+
+We can now formally compare the three models using `compare()`, which returns DIC, BPIC, and marginal deviance (MD $= -2 \times$ marginal likelihood); lower values indicate a preferred model:
+
+```{r rlard-compare-code, eval=FALSE}
+compare(list(rlrd  = emc_rlrd,
+             rlddm = emc_rlddm,
+             rlard = emc_rlard))
+```
+
+```{r rlard-compare-run, echo=FALSE, dependson=c("rlrd-fit-run", "rlddm-fit-run", "rlard-fit-run")}
+emc_rlrd <- EMC2:::loadRData('./cache/exp1_rlrd.RData')
+emc_rlddm <- EMC2:::loadRData('./cache/exp1_rlddm.RData')
+emc_rlard <- EMC2:::loadRData('./cache/exp1_rlard.RData')
+compare(list(rlrd  = emc_rlrd,
+             rlddm = emc_rlddm,
+             rlard = emc_rlard))
+```
+
+# Factors on parameters — the speed-accuracy trade-off {#sec:sat}
+Many research questions ask which cognitive processes are affected by an experimental manipulation. A classic example in the decision-making literature is the speed-accuracy trade-off (SAT): when instructed to respond quickly, people tend to lower their response thresholds; when instructed to be accurate, they raise them. This section reproduces the results from experiment 2 of @Miletic2021, in which participants performed an instrumental learning task with trial-by-trial cues instructing them to emphasise either speed or accuracy. We fit an RL-ARD to test whether this manipulation affected response thresholds (`B`), drift rate urgency (`v`), or both.
+
+### Data
+
+The data preparation follows the same steps as Section \@ref(sec:rlrd), and retains the `cue` column (levels: `"accuracy"`, `"speed"`), which will enter the model formula as a between-condition factor:
+
+```{r sat-load-data}
+load('./data/data_exp3.RData')
+dat <- dat[!dat$excl, ]
+dat <- dat[!is.na(dat$rt), ]
+dat$rt <- round(dat$rt, 3)
+
+dat$subjects <- as.factor(dat$pp)
+dat$R        <- factor(dat$choice_direction,
+                       levels = c(0, 1), labels = c('left', 'right'))
+dat$S        <- factor(ifelse(dat$p_win_left > dat$p_win_right, 'left', 'right'),
+                       levels = c('left', 'right'))
+dat$reward   <- dat$outcome
+dat$s_left   <- paste0('s_', dat$stimulus_symbol_left)
+dat$s_right  <- paste0('s_', dat$stimulus_symbol_right)
+dat$p_left   <- dat$p_win_left
+dat$p_right  <- dat$p_win_right
+dat$cue      <- as.factor(dat$cue)
+
+dat$exposure <- get_exposure(dat)
+
+dat <- dat[, c('subjects', 'S', 'R', 'rt', 'reward', 's_left', 's_right', 'p_left', 'p_right', 'cue', 'exposure')]
+
+print(head(dat))
+
+all_symbols_sat <- unique(c(dat$s_left, dat$s_right))
+make_covariate_columns_sat <- setNames(
+  lapply(all_symbols_sat, covariate_column_generator),
+  all_symbols_sat
+)
+```
+
+The RL component is identical to the RL-ARD in Section \@ref(sec:rlard): a delta kernel with difference and sum bases, and the feedback generator. The only change is in the model formula, where `B` and `v` are allowed to vary with `cue`. We use a single-column contrast matrix `ADmat` that codes the accuracy-minus-speed difference, so the estimated effect directly reflects the change in each parameter when moving from the speed to the accuracy cue:
+
+```{r sat-design}
+kernel_sat <- make_kernel(all_symbols_sat, 'delta')
+base_diff_sat <- make_base('v', 'lin', kernel = kernel_sat,
+                           coding = list(d = make_RL_ARD_difference),
+                           phase  = 'posttransform')
+base_sum_sat  <- make_base('v', 'lin', kernel = kernel_sat,
+                           coding = list(s = make_RL_ARD_sum),
+                           phase  = 'posttransform')
+trend_sat <- make_trend(base_diff_sat, base_sum_sat)
+
+# Contrast matrix: accuracy - speed
+ADmat <- matrix(c(1, -1), ncol = 1,
+                dimnames = list(NULL, c('a-s')))
+
+design_sat_full <- design(model      = RDM,
+                          data       = dat,
+                          functions  = c(reward=feedback_generator,
+                                         make_covariate_columns_sat),
+                          matchfun   = function(d) d$S == d$lR,
+                          contrasts  = list(cue = ADmat),
+                          formula    = list(B ~ cue, v ~ cue, t0 ~ 1),
+                          trend      = trend_sat,
+                          constants  = c('v.q0' = 0),
+                          report_p_vector = FALSE)
+```
+
+We also specify a threshold-only model, in which `v` is fixed across cues, to test whether the SAT manipulation affected drift rates over and above thresholds:
+
+```{r sat-design-b}
+design_sat_B <- design(model      = RDM,
+                       data       = dat,
+                       functions  = c(reward=feedback_generator,
+                                      make_covariate_columns_sat),
+                       matchfun   = function(d) d$S == d$lR,
+                       contrasts  = list(cue = ADmat),
+                       formula    = list(B ~ cue, v ~ 1, t0 ~ 1),
+                       trend      = trend_sat,
+                       constants  = c('v.q0' = 0),
+                       report_p_vector = FALSE)
+```
+
+### Fitting
+
+```{r sat-fit-code, eval=FALSE}
+emc_sat_full <- make_emc(dat, design_sat_full)
+emc_sat_full <- fit(emc_sat_full)
+
+emc_sat_B <- make_emc(dat, design_sat_B)
+emc_sat_B <- fit(emc_sat_B)
+```
+
+```{r sat-fit-run, include=FALSE, dependson=c("sat-design", "sat-design-b")}
+sat_full_fn <- "./cache/exp3_sat_full.RData"
+sat_B_fn    <- "./cache/exp3_sat_B.RData"
+
+if (file.exists(sat_full_fn)) {
+  emc_sat_full <- EMC2:::loadRData(sat_full_fn)
+} else {
+  emc_sat_full <- make_emc(dat, design_sat_full)
+  emc_sat_full <- fit(emc_sat_full, cores_per_chain = 5, fileName = sat_full_fn)
+  emc_sat_full <- add_ICs_MLL(emc_sat_full)
+  save(emc_sat_full, file = sat_full_fn)
+}
+
+if (file.exists(sat_B_fn)) {
+  emc_sat_B <- EMC2:::loadRData(sat_B_fn)
+} else {
+  emc_sat_B <- make_emc(dat, design_sat_B)
+  emc_sat_B <- fit(emc_sat_B, cores_per_chain = 5, fileName = sat_B_fn)
+  emc_sat_B <- add_ICs_MLL(emc_sat_B)
+  save(emc_sat_B, file = sat_B_fn)
+}
+```
+
+### Convergence and posteriors
+
+```{r sat-check-code, eval=FALSE}
+check(emc_sat_full)
+```
+
+
+```{r sat-check-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="sat-fit-run"}
+par(mar = c(3, 3, 1.5, 0.5))  # opens device in this chunk before check() runs
+invisible(capture.output({ckc <- check(emc_sat_full, plot_worst = FALSE, set.par=FALSE)}))
+subn <- which.max(lapply(ckc$alpha, function(x) max(x[1, ])))
+cap <- paste0(
+  "Trace plots of the sampled parameters with highest Rhat values (i.e., worst convergence) at the group-level mean (left, mu), the group-level variance (middle, sigma2), and the subject-level (alpha; here, subject ",
+  subn,
+  "). ESS = effective sample size."
+)
+print_par("1x3")
+check(emc_sat_full, set.par = FALSE)
+```
+
+```{r sat-plotpars-code, eval=FALSE}
+plot_pars(emc_sat_full)
+```
+
+```{r sat-plotpars-run, echo=FALSE, fig.width=fig_w[["2x4"]], fig.height=fig_h[["2x4"]], fig.cap=cap, dependson="sat-fit-run"}
+cap <- paste0(
+  "Posterior density (black) and prior density (red) of sampled group-level mean parameters ",
+  "of the full SAT model (", tt("B ~ cue"), ", ", tt("v ~ cue"), "). ",
+  "Parameters suffixed ", tt("a-s"), " reflect the accuracy-minus-speed contrast. ",
+  "Positive values indicate a higher parameter estimate in the accuracy than the speed condition."
+)
+print_par("2x4")
+plot_pars(emc_sat_full, set.par = FALSE)
+```
+
+```{r sat-credint-code, dependson="sat-fit-run"}
+credint(emc_sat_full)
+# credint(emc_sat_full, map = TRUE)
+```
+
+### Posterior predictives
+
+```{r sat-pp-code, eval=FALSE}
+pp_sat_full <- predict(emc_sat_full)
+
+plot_learning(dat=dat, pp=pp_sat_full[is.finite(pp_sat_full$rt),], x.var='exposure', row.factor = 'cue')
+```
+
+```{r sat-pp-run, echo=FALSE, fig.width=fig_w[["2x3"]], fig.height=fig_h[["2x3"]], fig.cap=cap, dependson="sat-fit-run"}
+pp_sat_full <- predict(emc_sat_full, n_cores = 24)
+
+cap <- "Learning plots of the full SAT RL-ARD, separately for each condition (rows). Left panel shows accuracy over exposure (i.e., the number of times a stimulus pair has been seen), binned into 10 bins. Black lines are data, red shaded areas are 90% credible interval of the model's posterior predictives. Middle and right panels show correct and error RT distributions, respectively. The lower, middle, and top lines correspond to the 10th, 50th, and 90th RT quantiles."
+print_par("2x3")
+plot_learning(dat=dat, pp=pp_sat_full[is.finite(pp_sat_full$rt),], x.var='exposure', set.par=FALSE, row.factor = 'cue')
+```
+
+### Model comparison
+
+To test whether the cue affected drift rates over and above thresholds, we compare the full model against the threshold-only model:
+
+```{r sat-compare-code, eval=FALSE}
+compare(list(full = emc_sat_full,
+             B    = emc_sat_B))
+```
+
+```{r sat-compare-run, echo=FALSE, dependson="sat-fit-run"}
+compare(list(full = emc_sat_full,
+             B    = emc_sat_B))
+```
+
+
+# Positive and negative learning rates
+The standard delta rule assumes people adjust Q-values equally when reward is higher than expected compared to when it is lower than expected. However, several research papers suggest that people show an optimism bias: Positive prediction errors lead to larger Q-value adjustments than negative adjustments. This is formalized by allowing for two separate learning rates:
+
+$$
+\begin{aligned}
+PE_t &= r_t - Q_t \\
+Q_{t+1} &= Q_t +
+\begin{cases}
+\alpha^{+} \cdot PE_t & \text{if } PE_t > 0 \\
+\alpha^{-} \cdot PE_t & \text{if } PE_t < 0
+\end{cases}
+\end{aligned}
+$$
+In *EMC2*, this is implemented by using the `'delta2lr'` kernel type, which introduces two learning rate parameters (`v.alphaPos` and `v.alphaNeg`) instead of one. We demonstrate this using the openly shared data from @lefebvre2017.
+
+```{r 2lr-data-design}
+load('./data/lefebvre2017/lefebvre_exp1.RData')
+dat$exposure <- get_exposure(dat)
+
+all_symbols <- unique(c(dat$s_left, dat$s_right))
+make_covariate_columns <- setNames(lapply(all_symbols,
+                                          covariate_column_generator), all_symbols)
+
+kernel <- make_kernel(all_symbols, 'delta2lr')
+base1 <- make_base('v', 'lin', kernel=kernel, phase='posttransform', coding=list('d'=make_RL_ARD_difference))
+base2 <- make_base('v', 'lin', kernel=kernel, phase='posttransform', coding=list('s'=make_RL_ARD_sum))
+trend <- make_trend(base1, base2)
+
+ADmat <- matrix(c(1, -1), ncol=1, dimnames=list(NULL, c('a-s')))
+design_RDM <- design(model=RDM,
+                     data=dat,
+                     functions=make_covariate_columns,
+                     contrasts=list(cue=ADmat),
+                     formula=list(B ~ 1, v ~ 1, t0 ~ 1),
+                     trend=trend,
+                     constants=c('v.q0'=0),
+                     report_p_vector=FALSE)
+
+emc <- make_emc(dat, design_RDM)
+```
+
+We can inspect the group-level posterior parameters, which indeed suggest that there is a difference between the positive (group-level mean ~ 0.17) and negative (~0.064) learning rates:
+
+```{r 2lr-fit-code, eval=FALSE}
+emc <- fit(emc)
+check(emc)
+credint(emc)
+```
+
+```{r 2lr-fit-run, include=FALSE, dependson="rlard-design"}
+lef2lr_fn <- "./cache/lefebvre2017exp1_2lr.RData"
+if (file.exists(lef2lr_fn)) {
+  emc <- EMC2:::loadRData(lef2lr_fn)
+} else {
+  emc <- make_emc(dat, design_RDM)
+  emc <- fit(emc, cores_per_chain = 5, fileName = lef2lr_fn)
+  emc <- add_ICs_MLL(emc)
+  save(emc, file = lef2lr_fn)
+}
+```
+
+```{r 2lr-check-run, echo=FALSE, fig.width=fig_w[["1x3"]], fig.height=fig_h[["1x3"]], fig.cap=cap, dependson="2lr-fit-run"}
+par(mar = c(3, 3, 1.5, 0.5))  # opens device in this chunk before check() runs
+invisible(capture.output({ckc <- check(emc, plot_worst = FALSE, set.par=FALSE)}))
+subn <- which.max(lapply(ckc$alpha, function(x) max(x[1, ])))
+cap <- paste0(
+  "Trace plots of the sampled parameters with highest Rhat values (i.e., worst convergence) at the group-level mean (left, mu), the group-level variance (middle, sigma2), and the subject-level (alpha; here, subject ",
+  subn,
+  "). ESS = effective sample size."
+)
+print_par("1x3")
+check(emc, set.par = FALSE)
+```
+
+```{r 2lr_credint}
+credint(emc)
+```
+
+
+### Reparameterisation: estimating the learning rate difference directly {#sec:2lr-reparam}
+
+The two-learning-rate model above is useful for model comparison — for instance, to demonstrate that two learning rates provide a more parsimonious account of the data than one. However, it does not directly estimate the *difference* between learning rates, which is often the target of inference. A better parameterisation expresses the two rates as a mean and a difference:
+
+$$
+\alpha^{+} = \alpha_\text{mean} + \tfrac{1}{2}\,\alpha_\text{diff}, \qquad
+\alpha^{-} = \alpha_\text{mean} - \tfrac{1}{2}\,\alpha_\text{diff}
+$$
+This allows a prior to be placed directly on $$\alpha_\text{diff}$$ and yields participant-wise estimates of the asymmetry. In *EMC2*, linear reparameterisations of kernel parameters are specified via the `parameter_design` argument to `design()`. The reparameterisation matrix maps the sampled parameters (`alphaMean`, `alphaDiff`) to the kernel parameters (`v.alphaPos`, `v.alphaNeg`):
+
+```{r 2lr-reparam-design}
+parameter_design <- matrix(c(1,  0.5,
+                             1, -0.5),
+                           nrow = 2, byrow = TRUE,
+                           dimnames = list(c("v.alphaPos", "v.alphaNeg"),
+                                           c("alphaMean",  "alphaDiff")))
+
+design_2lr_reparam <- design(model            = RDM,
+                             data             = dat,
+                             functions        = make_covariate_columns,
+                             formula          = list(B ~ 1, v ~ 1, t0 ~ 1),
+                             trend            = trend,
+                             constants        = c('v.q0' = 0),
+                             parameter_design = list(weights = parameter_design),
+                             report_p_vector  = FALSE)
+
+emc_2lr_reparam <- make_emc(dat, design_2lr_reparam)
+```
+
+```{r 2lr-reparam-fit-code, eval=FALSE}
+emc_2lr_reparam <- fit(emc_2lr_reparam)
+```
+
+```{r 2lr-reparam-fit-run, include=FALSE, dependson="2lr-reparam-design"}
+lef2lr_reparam_fn <- "./cache/lefebvre2017exp1_2lr_reparam.RData"
+if (file.exists(lef2lr_reparam_fn)) {
+  emc_2lr_reparam <- EMC2:::loadRData(lef2lr_reparam_fn)
+} else {
+  emc_2lr_reparam <- make_emc(dat, design_2lr_reparam)
+  emc_2lr_reparam <- fit(emc_2lr_reparam, cores_per_chain = 5, fileName = lef2lr_reparam_fn)
+  emc_2lr_reparam <- add_ICs_MLL(emc_2lr_reparam)
+  save(emc_2lr_reparam, file = lef2lr_reparam_fn)
+}
+```
+
+We can now inspect the posterior over the learning rate difference directly:
+
+```{r 2lr-reparam-plotpars-code, eval=FALSE}
+plot_pars(emc_2lr_reparam)
+credint(emc_2lr_reparam)
+```
+
+```{r 2lr-reparam-plotpars-run, echo=FALSE, fig.width=fig_w[["1x4"]], fig.height=fig_h[["1x4"]], fig.cap=cap, dependson="2lr-reparam-fit-run"}
+cap <- paste0(
+  "Posterior density (black) and prior density (red) of sampled group-level mean parameters ",
+  "of the reparameterised two-learning-rate RL-ARD. ",
+  tt("alphaMean"), " is the mean learning rate; ",
+  tt("alphaDiff"), " is the difference (positive minus negative learning rate). ",
+  "A positive ", tt("alphaDiff"), " indicates an optimism bias."
+)
+print_par("1x4")
+plot_pars(emc_2lr_reparam, set.par = FALSE)
+```
+
+```{r 2lr-reparam-credint, dependson="2lr-reparam-fit-run"}
+credint(emc_2lr_reparam)
+```
+
+
+# Factual and counterfactual feedback
+An alternative account of asymmetric learning rates is the confirmation bias hypothesis [@palminteriConfirmationBiasHuman2017]: rather than an optimism bias, people process feedback that *confirms* their current belief with a higher learning rate than feedback that *opposes* it. If choosing an option expresses a belief that that option is more valuable, this also predicts higher learning rates for positive prediction errors on chosen options — but crucially, it makes the opposite prediction for unchosen options. Not choosing an option implies believing it is less valuable, so a worse-than-expected outcome for the unchosen option *confirms* that belief and should be processed with a higher learning rate.
+
+Counterfactual feedback — where outcomes are revealed for both the chosen and unchosen option after each trial — allows these two accounts to be dissociated. Under the confirmation bias account, the learning rate asymmetry (positive > negative) should *reverse* for unchosen options. We demonstrate how to implement this in *EMC2* using [experiment 2](https://figshare.com/articles/dataset/Confirmation_bias_in_human_reinforcement_learning_evidence_from_counterfactual_feedback_processing/5220619?file=8916295) from @palminteriConfirmationBiasHuman2017, which includes both factual and counterfactual feedback.
+
+### Data and design
+
+The key difference from earlier examples is that feedback is now accumulator-specific: the chosen accumulator receives the outcome for the chosen option, and the unchosen accumulator receives the outcome for the unchosen option. This requires a modified covariate column generator that routes feedback to the correct accumulator based on `lR`, and two separate feedback generators for simulation:
+
+```{r confirmation-data-functions}
+load('./data/palminteri2017_exp2.RData')
+
+all_symbols_cf <- unique(c(dat$s_left, dat$s_right))
+all_symbols_cf <- all_symbols_cf[order(as.numeric(gsub('[^0-9]', '', all_symbols_cf)))]
+
+# Covariate column generator: routes factual/counterfactual feedback to the
+# correct accumulator based on lR (left accumulator gets reward_left, etc.)
+covariate_column_generator_cf <- function(col_name) {
+  function(data) {
+    out      <- rep(NA, nrow(data))
+    is_left  <- data$lR == "left"  & data$s_left  == col_name
+    is_right <- data$lR == "right" & data$s_right == col_name
+    out[is_left]  <- data$reward_left[is_left]
+    out[is_right] <- data$reward_right[is_right]
+    out
+  }
+}
+
+make_covariate_columns_cf <- setNames(
+  lapply(all_symbols_cf, covariate_column_generator_cf),
+  all_symbols_cf
+)
+
+# Feedback generators for simulation: one per side
+feedback_generator_left <- function(d) {
+  data <- d[d$lR == levels(d$lR)[1], ]
+  rep(rbinom(nrow(data), 1, data$p_left) * 2 - 1, each = nlevels(d$lR))
+}
+
+feedback_generator_right <- function(d) {
+  data <- d[d$lR == levels(d$lR)[1], ]
+  rep(rbinom(nrow(data), 1, data$p_right) * 2 - 1, each = nlevels(d$lR))
+}
+```
+
+We can use these new functions in an RL-ARD as follows: 
+
+```{r confirmation-design, dependson="confirmation-data-functions"}
+# at_mode="push" needs some explanation
+kernel_cf    <- make_kernel(all_symbols_cf, 'delta2lr', at_mode = 'push')
+base_diff_cf <- make_base('v', 'lin', kernel = kernel_cf,
+                          coding = list(d = make_RL_ARD_difference),
+                          phase  = 'posttransform')
+base_sum_cf  <- make_base('v', 'lin', kernel = kernel_cf,
+                          coding = list(s = make_RL_ARD_sum),
+                          phase  = 'posttransform')
+trend_cf <- make_trend(base_diff_cf, base_sum_cf)
+
+design_cf <- design(model     = RDM,
+                    data      = dat,
+                    functions = c(chosen        = function(x) x$R == x$lR,
+                                  reward_left   = feedback_generator_left,
+                                  reward_right  = feedback_generator_right,
+                                  make_covariate_columns_cf),
+                    formula   = list(B ~ 1, v ~ 1, t0 ~ 1,
+                                     v.alphaPos ~ chosen, v.alphaNeg ~ chosen,
+                                     v.q0 ~ 1),
+                    trend     = trend_cf,
+                    constants = c('v.q0' = 0),
+                    report_p_vector = FALSE)
+
+emc_cf <- make_emc(dat, design_cf)
+```
+
+The `chosen` function in `functions` creates a covariate that is `TRUE` for the chosen accumulator and `FALSE` for the unchosen accumulator on each trial. By including `v.alphaPos ~ chosen` and `v.alphaNeg ~ chosen` in the formula, we allow both learning rates to vary between the chosen and unchosen accumulators, directly testing the confirmation bias prediction.
+
+We can fit as normal:
+
+```{r confirmation-fit-code, eval=FALSE}
+emc_cf <- fit(emc_cf)
+```
+
+```{r confirmation-fit-run, include=FALSE, dependson="confirmation-data-design"}
+cf_fn <- "./cache/palminteri2017exp2_cf.RData"
+if (file.exists(cf_fn)) {
+  emc_cf <- EMC2:::loadRData(cf_fn)
+} else {
+  emc_cf <- make_emc(dat, design_cf)
+  emc_cf <- fit(emc_cf, cores_per_chain = 5, fileName = cf_fn)
+  emc_cf <- add_ICs_MLL(emc_cf)
+  save(emc_cf, file = cf_fn)
+}
+```
+
+### Quality of fit & testing
+
+Two of the four conditions are difficult to summarise with accuracy: the first condition has equal reward probabilities for all symbols (so there is no objectively correct response), and the fourth condition includes a reversal after 13 trials. We therefore plot the probability of choosing right instead of accuracy, with conditions in rows:
+
+```{r confirmation-pp-code, eval=FALSE}
+pp <- predict(emc_cf)
+dat$choice <- dat$R=='right'
+pp$choice <- pp$R=='right'
+plot_learning(dat, pp[is.finite(pp$rt),], x.var='exposure', acc.var = 'choice', 
+              acc.ylim = c(0, 1), row.factor = 'condition')
+```
+
+
+```{r confirmation-pp-run, echo=FALSE, fig.cap=cap, fig.width=fig_w[["3x3"]], fig.height=fig_h[["3x3"]], dependson=c("confirmation-fit-run")}
+cap <- paste0(
+  "Learning plots of the confirmation bias RL-ARD, separately for each condition (rows). ",
+  "Left panel: probability of choosing right as a function of exposure, binned into 10 bins. ",
+  "Black lines are data; red shaded areas are the 95\\% credible interval of the posterior ",
+  "predictives. Middle and right panels: correct and error RT distributions, respectively. ",
+  "The lower, middle, and upper lines correspond to the 10th, 50th, and 90th RT quantiles."
+)
+
+pp <- predict(emc_cf, n_cores=20, shrink2bound=TRUE)
+dat <- get_data(emc_cf)
+dat$choice <- dat$R=='right'
+pp$choice <- pp$R=='right'
+print_par("3x3")
+plot_learning(dat, pp[is.finite(pp$rt)&pp$rt<10,], x.var='exposure', acc.var = 'choice', 
+              acc.ylim = c(0, 1), row.factor = 'condition_label', set.par=FALSE)
+```
+
+And what are the resulting parameters?
+```{r factualcounterfactual-credint}
+credint(emc, map=TRUE)
+```
+
+The credible intervals show the expected interaction: for chosen options, the positive learning rate exceeds the negative learning rate, whereas for unchosen options the pattern reverses — consistent with confirmation bias rather than a general optimism bias.
+
