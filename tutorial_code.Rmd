@@ -35,6 +35,11 @@ opts_chunk$set(
   dev         = if (is_latex_output()) "pdf" else "svg"
 )
 
+# Master switch for model fitting during knit. If FALSE, chunks load fits from
+# ./cache/ and stop with an informative error when a cached fit is missing,
+# rather than launching a (potentially hours-long) sampling run mid-render.
+fit_models <- FALSE
+
 # Log message outputs separately so they don't clutter the rendered document
 log_file <- file("render_messages.log", open = "wt")
 knitr::knit_hooks$set(message = function(x, options) {
@@ -478,6 +483,9 @@ With the covariates, kernel, coding, and feedback generator specified, we can no
 rlrd_fn <- "./cache/exp1_rlrd.RData"
 if (file.exists(rlrd_fn)) {
   emc_rlrd <- EMC2:::loadRData(rlrd_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", rlrd_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_rlrd <- fit(emc, cores_per_chain = 5, fileName = rlrd_fn)
 }
@@ -586,6 +594,9 @@ emc_rlddm <- fit(emc_rlddm)
 rlddm_fn <- "./cache/exp1_rlddm.RData"
 if (file.exists(rlddm_fn)) {
   emc_rlddm <- EMC2:::loadRData(rlddm_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", rlddm_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_rlddm <- make_emc(dat, design_DDM)
   emc_rlddm <- fit(emc_rlddm, cores_per_chain = 5, fileName = rlddm_fn)
@@ -698,6 +709,9 @@ check(emc_rlard)
 rlard_fn <- "./cache/exp1_rlard.RData"
 if (file.exists(rlard_fn)) {
   emc_rlard <- EMC2:::loadRData(rlard_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", rlard_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_rlard <- make_emc(dat, design_ARD)
   emc_rlard <- fit(emc_rlard, cores_per_chain = 5, fileName = rlard_fn)
@@ -878,6 +892,9 @@ sat_B_fn    <- "./cache/exp3_sat_B.RData"
 
 if (file.exists(sat_full_fn)) {
   emc_sat_full <- EMC2:::loadRData(sat_full_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", sat_full_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_sat_full <- make_emc(dat, design_sat_full)
   emc_sat_full <- fit(emc_sat_full, cores_per_chain = 5, fileName = sat_full_fn)
@@ -887,6 +904,9 @@ if (file.exists(sat_full_fn)) {
 
 if (file.exists(sat_B_fn)) {
   emc_sat_B <- EMC2:::loadRData(sat_B_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", sat_B_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_sat_B <- make_emc(dat, design_sat_B)
   emc_sat_B <- fit(emc_sat_B, cores_per_chain = 5, fileName = sat_B_fn)
@@ -1019,6 +1039,9 @@ credint(emc)
 lef2lr_fn <- "./cache/lefebvre2017exp1_2lr.RData"
 if (file.exists(lef2lr_fn)) {
   emc <- EMC2:::loadRData(lef2lr_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", lef2lr_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc <- make_emc(dat, design_RDM)
   emc <- fit(emc, cores_per_chain = 5, fileName = lef2lr_fn)
@@ -1082,6 +1105,9 @@ emc_2lr_reparam <- fit(emc_2lr_reparam)
 lef2lr_reparam_fn <- "./cache/lefebvre2017exp1_2lr_reparam.RData"
 if (file.exists(lef2lr_reparam_fn)) {
   emc_2lr_reparam <- EMC2:::loadRData(lef2lr_reparam_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", lef2lr_reparam_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_2lr_reparam <- make_emc(dat, design_2lr_reparam)
   emc_2lr_reparam <- fit(emc_2lr_reparam, cores_per_chain = 5, fileName = lef2lr_reparam_fn)
@@ -1200,6 +1226,9 @@ emc_cf <- fit(emc_cf)
 cf_fn <- "./cache/palminteri2017exp2_cf.RData"
 if (file.exists(cf_fn)) {
   emc_cf <- EMC2:::loadRData(cf_fn)
+} else if (!fit_models) {
+  stop("Cached fit not found: ", cf_fn,
+       " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_cf <- make_emc(dat, design_cf)
   emc_cf <- fit(emc_cf, cores_per_chain = 5, fileName = cf_fn)
