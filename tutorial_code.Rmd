@@ -150,11 +150,9 @@ First, let's load the required packages and data:
 library(EMC2)
 set.seed(1) # for reproducibility
 
-# Plotting functions used later in this tutorial
-code_url <- paste0(
-  "https://raw.githubusercontent.com/StevenM1/",
-  "rl_eam_tutorial/refs/heads/main/RL_plotting_utils.R")
-source(code_url)
+# Plotting functions used later in this tutorial (local copy of
+# https://raw.githubusercontent.com/StevenM1/rl_eam_tutorial/refs/heads/main/RL_plotting_utils.R)
+source("./RL_plotting_utils.R")
 
 # Load dataset 1 from Miletić et al. (2021)
 load('./data/data_exp1.RData')
@@ -488,6 +486,8 @@ if (file.exists(rlrd_fn)) {
        " -- set fit_models <- TRUE in the setup chunk to fit during knit.")
 } else {
   emc_rlrd <- fit(emc, cores_per_chain = 5, fileName = rlrd_fn)
+  emc_rlrd <- add_ICs_MLL(emc_rlrd)
+  save(emc_rlrd, file = rlrd_fn)
 }
 ```
 
@@ -1002,7 +1002,14 @@ $$
 In *EMC2*, this is implemented by using the `'delta2lr'` kernel type, which introduces two learning rate parameters (`v.alphaPos` and `v.alphaNeg`) instead of one. We demonstrate this using the openly shared data from @lefebvre2017.
 
 ```{r 2lr-data-design}
-load('./data/lefebvre2017/lefebvre_exp1.RData')
+lef_data_fn <- './data/lefebvre2017/lefebvre_exp1.RData'
+if (!file.exists(lef_data_fn)) {
+  stop("Data file not found: ", lef_data_fn,
+       " -- this file is not included in the repository (see",
+       " tutorial_feedback_notes.md); obtain the Lefebvre et al. (2017)",
+       " data before knitting this section.")
+}
+load(lef_data_fn)
 dat$exposure <- get_exposure(dat)
 
 all_symbols <- unique(c(dat$s_left, dat$s_right))
@@ -1035,7 +1042,7 @@ check(emc)
 credint(emc)
 ```
 
-```{r 2lr-fit-run, include=FALSE, dependson="rlard-design"}
+```{r 2lr-fit-run, include=FALSE, dependson="2lr-data-design"}
 lef2lr_fn <- "./cache/lefebvre2017exp1_2lr.RData"
 if (file.exists(lef2lr_fn)) {
   emc <- EMC2:::loadRData(lef2lr_fn)
@@ -1222,7 +1229,7 @@ We can fit as normal:
 emc_cf <- fit(emc_cf)
 ```
 
-```{r confirmation-fit-run, include=FALSE, dependson="confirmation-data-design"}
+```{r confirmation-fit-run, include=FALSE, dependson=c("confirmation-data-functions", "confirmation-design")}
 cf_fn <- "./cache/palminteri2017exp2_cf.RData"
 if (file.exists(cf_fn)) {
   emc_cf <- EMC2:::loadRData(cf_fn)

@@ -36,6 +36,9 @@ vignettes/*.pdf
 *.utf8.md
 *.knit.md
 
+# Render-time message log (truncated and rewritten on every knit)
+render_messages.log
+
 # R Environment Variables
 .Renviron
 
