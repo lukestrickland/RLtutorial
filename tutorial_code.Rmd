@@ -38,7 +38,7 @@ opts_chunk$set(
 # Master switch for model fitting during knit. If FALSE, chunks load fits from
 # ./cache/ and stop with an informative error when a cached fit is missing,
 # rather than launching a (potentially hours-long) sampling run mid-render.
-fit_models <- FALSE
+fit_models <- F
 
 # Log message outputs separately so they don't clutter the rendered document
 log_file <- file("render_messages.log", open = "wt")
@@ -1276,8 +1276,8 @@ plot_learning(dat, pp[is.finite(pp$rt)&pp$rt<10,], x.var='exposure', acc.var = '
 ```
 
 And what are the resulting parameters?
-```{r factualcounterfactual-credint}
-credint(emc, map=TRUE)
+```{r factualcounterfactual-credint, dependson="confirmation-fit-run"}
+credint(emc_cf, map=TRUE)
 ```
 
 The credible intervals show the expected interaction: for chosen options, the positive learning rate exceeds the negative learning rate, whereas for unchosen options the pattern reverses — consistent with confirmation bias rather than a general optimism bias.

@@ -88,6 +88,12 @@ fixes were applied to `tutorial_code.Rmd` (and repo config):
   history. (Known minor issue, not yet fixed: the log connection is never
   `close()`d, and knitting both output formats overwrites the first format's
   log.)
+- **Confirmation-bias fit refit on correct data (2026-07-30, later):** the
+  cached `palminteri2017exp2_cf.RData` produced by the interrupted/restarted
+  renders had been fit to the Lefebvre data (see issue 6). It was quarantined
+  and refit on the Palminteri data via the tutorial's own chunks; the knitr
+  chunk caches (`cache/pdf/`, `cache/html/`) were deleted to clear any stale
+  `dat` state, and the final `credint` chunk was pointed at `emc_cf` (issue 5).
 - Also noted during review, not yet addressed: posterior values quoted in the
   prose are hard-coded literals (e.g. the ~0.17 / ~0.064 learning rates in the
   2lr section) and fits are unseeded, so any refit can silently drift from the
@@ -106,7 +112,19 @@ fixes were applied to `tutorial_code.Rmd` (and repo config):
 - **Issue (a) — no point estimate:** the posterior predictives are shown only as a 95% credible band, which is wide here, making it hard to judge how well the model's central tendency tracks the data (misfit could sit at the band's edge and be invisible). Notably, `plot_learning()` already computes the posterior predictive median in both panels — the accuracy aggregation takes quantiles `c(0.025, 0.5, 0.975)` and the RT aggregation keeps a `"50%"` column — but only the outer quantiles are ever drawn. Adding the median as a red line in the accuracy and RT panels is a two-line change using values already computed.
 - **Issue (b) — thin bins:** the default `n.breaks = 10` over exposure leaves ~2-3 trials per subject per bin for the Palminteri data (20 subjects, ~24 exposures per condition), so both the data line and the credible band are noisy/wide. Aggregating into fewer bins (e.g. 5-6) would make the condition-level learning patterns more readable. Caveat: the fourth condition reverses after 13 trials, so keep enough resolution there for the post-reversal dip to remain visible rather than being averaged away.
 
-## 5. Suggestion: show the feedback generator in Figure 1
+## 5. Wrong object in the final `credint` chunk
+
+- **Where:** chunk `factualcounterfactual-credint` (end of the confirmation-bias section).
+- **Issue:** the chunk calls `credint(emc, map=TRUE)`, but `emc` is the Lefebvre 2lr fit from the previous section — the last table in the document therefore shows the wrong model's parameters, while the surrounding prose interprets the confirmation-bias interaction (`v.alphaPos`/`v.alphaNeg` by `chosen`). Should be `credint(emc_cf, map=TRUE)`. Fixed locally in this fork.
+
+## 6. Shared global `dat` + `cache=TRUE` produced a fit on the wrong dataset
+
+- **Where:** document-wide design; bit us concretely in `confirmation-fit-run`.
+- **What happened:** on a re-knit after edits, the cached confirmation-bias fit turned out to have been fit to the *Lefebvre* data (4,779 rows, 50 subjects) instead of the Palminteri data (3,840 rows, 20 subjects) — discovered only because the posterior predictive plot crashed on the missing `condition_label` column. The fit itself sampled happily on the wrong data with no warning; the corrupted `cache/palminteri2017exp2_cf.RData` was quarantined and refit.
+- **Mechanism:** every section loads its dataset into the same global `dat`, and knitr's cache only stores objects a chunk *creates*, not objects it *modifies* (a documented knitr limitation). `confirmation-data-functions` overwrites the pre-existing `dat` via `load()`, so when that chunk is replayed from cache while a chunk from an *earlier* section re-executes (here: the edited `2lr-data-design`), downstream chunks silently see the earlier section's `dat`. Any cross-section edit can trigger this; it will affect other sections the same way.
+- **Suggested fix:** give each section its own data object (`dat_exp1`, `dat_sat`, `dat_lef`, `dat_cf`) instead of reusing `dat`; or set `cache=FALSE` on the data-loading chunks; and cheaply assert before each fit (e.g. `stopifnot(nrow(dat) == 3840)`) so a wrong-data fit fails fast instead of sampling for half an hour.
+
+## 7. Suggestion: show the feedback generator in Figure 1
 
 - **Where:** overview figure `fig-rlrd-overview` (tikz chunk ~line 179) and the text introducing it.
 - **Issue:** the text enumerates four implementation steps — (1) specify covariates, (2) apply the delta rule, (3) map covariates to drift rates, (4) specify a feedback generator — and says the figure "illustrates how these steps connect", but the figure only depicts steps 1-3 (Data → DADM → covariate coding × delta rule × weight → drift rates). The feedback generator is absent.
