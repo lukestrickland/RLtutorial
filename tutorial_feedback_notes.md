@@ -100,7 +100,13 @@ fixes were applied to `tutorial_code.Rmd` (and repo config):
 - **Issue:** the call passes `contrasts = list(cue = ADmat)` with an accuracy-minus-speed `ADmat`, but the Lefebvre data has no `cue` column and no formula term uses `cue` (`B ~ 1, v ~ 1, t0 ~ 1`). This appears to be copy-paste from the SAT section. `design()` silently ignores it (verified by running the chunk), so it's harmless, but it's confusing for readers trying to understand which arguments matter.
 - **Suggested fix:** drop the `contrasts` argument (and the `ADmat` definition if unused) from this chunk.
 
-## 4. Suggestion: show the feedback generator in Figure 1
+## 4. Suggestion: point estimates + coarser binning in the final posterior predictive plot
+
+- **Where:** the confirmation-bias learning plot (chunk `confirmation-pp-run`) and `plot_learning()` in `RL_plotting_utils.R`.
+- **Issue (a) — no point estimate:** the posterior predictives are shown only as a 95% credible band, which is wide here, making it hard to judge how well the model's central tendency tracks the data (misfit could sit at the band's edge and be invisible). Notably, `plot_learning()` already computes the posterior predictive median in both panels — the accuracy aggregation takes quantiles `c(0.025, 0.5, 0.975)` and the RT aggregation keeps a `"50%"` column — but only the outer quantiles are ever drawn. Adding the median as a red line in the accuracy and RT panels is a two-line change using values already computed.
+- **Issue (b) — thin bins:** the default `n.breaks = 10` over exposure leaves ~2-3 trials per subject per bin for the Palminteri data (20 subjects, ~24 exposures per condition), so both the data line and the credible band are noisy/wide. Aggregating into fewer bins (e.g. 5-6) would make the condition-level learning patterns more readable. Caveat: the fourth condition reverses after 13 trials, so keep enough resolution there for the post-reversal dip to remain visible rather than being averaged away.
+
+## 5. Suggestion: show the feedback generator in Figure 1
 
 - **Where:** overview figure `fig-rlrd-overview` (tikz chunk ~line 179) and the text introducing it.
 - **Issue:** the text enumerates four implementation steps — (1) specify covariates, (2) apply the delta rule, (3) map covariates to drift rates, (4) specify a feedback generator — and says the figure "illustrates how these steps connect", but the figure only depicts steps 1-3 (Data → DADM → covariate coding × delta rule × weight → drift rates). The feedback generator is absent.
